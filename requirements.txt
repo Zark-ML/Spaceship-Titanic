@@ -46,7 +46,7 @@ python-dateutil=2.9.0post0=py312hca03da5_2
 python-tzdata=2023.3=pyhd3eb1b0_0
 pytz=2024.1=py312hca03da5_0
 readline=8.2=h1a28f6b_0
-scikit-learn=1.6.1=py312h313beb8_0
+
 scipy=1.15.1=py312ha409365_0
 seaborn=0.13.2=py312hca03da5_1
 setuptools=72.1.0=py312hca03da5_0
@@ -61,3 +61,11 @@ wheel=0.45.1=py312hca03da5_0
 xz=5.4.6=h80987f9_1
 zlib=1.2.13=h18a0788_1
 zstd=1.5.6=hfb09047_0
+
+pandas~=2.2.3
+numpy~=2.2.2
+matplotlib~=3.10.0
+seaborn~=0.13.2
+optuna~=4.2.0
+scikit-learn~=1.6.1
+skrebate~=0.62
