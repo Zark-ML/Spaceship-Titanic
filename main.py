@@ -13,6 +13,7 @@ from sklearn.metrics import (accuracy_score, confusion_matrix, classification_re
                              roc_curve, roc_auc_score, recall_score)
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.neighbors import NearestNeighbors
+from catboost  import CatBoostClassifier
 
 import optuna
 
@@ -321,6 +322,21 @@ class SpaceshipTitanic:
         print("Confusion Matrix:\n", confusion_matrix(self.y_test, y_pred))
         print("Classification Report:\n", classification_report(self.y_test, y_pred))
         return self.lr_model
+
+    def train_cat_boost(self, **kwargs):
+        """
+        Train by CatBoosing model using the training set.
+        Additional keyward arguments are  passed to the catboost model.
+        """
+        self.cb_model = CatBoostClassifier(iterations=50,depth=10, **kwargs)
+        self.cb_model.fit(self.X_train, self.y_train)
+        y_pred = self.cb_model.predict(self.X_test)
+        print("----- Cat Boosting -----")
+        print("Accuracy:", accuracy_score(self.y_test, y_pred))
+        print("Confusion Matrix:\n", confusion_matrix(self.y_test, y_pred))
+        print("Classification Report:\n", classification_report(self.y_test, y_pred))
+        return self.cb_model
+        
 
     def train_random_forest(self, **kwargs):
         """
