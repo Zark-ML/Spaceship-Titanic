@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib
+
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -13,7 +14,7 @@ from sklearn.metrics import (accuracy_score, confusion_matrix, classification_re
                              roc_curve, roc_auc_score, recall_score)
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.neighbors import NearestNeighbors
-from catboost  import CatBoostClassifier
+from catboost import CatBoostClassifier
 
 import optuna
 
@@ -180,76 +181,72 @@ class SpaceshipTitanic:
             self.df.drop(columns=['TotalExpenses'], inplace=True)
 
     def preprocess_data(self):
-        """
-        Perform missing value imputation, feature engineering, and type conversion.
-        This includes:
-          - Imputing numerical features with median values.
-          - Imputing categorical features with mode.
-          - Imputing the 'VIP' column with False where missing.
-          - Imputing the 'CryoSleep' column based on expense patterns.
-          - Extracting 'Group' and 'Group_id' from 'PassengerId'.
-          - Splitting the 'Cabin' column into 'Deck', 'Num', and 'Side'.
-          - Converting categorical values using a mapping dictionary.
-        """
-        # Impute numerical features with median values.
-        num_features = ['Age', 'RoomService', 'FoodCourt', 'ShoppingMall', 'Spa', 'VRDeck']
-        for feature in num_features:
-            median_value = self.df[feature].median()
-            self.df[feature].fillna(median_value, inplace=True)
-
-        # Impute categorical features with mode.
-        cat_features = ['HomePlanet', 'Destination', 'Cabin']
-        for feature in cat_features:
-            mode_value = self.df[feature].mode()[0]
-            self.df[feature].fillna(mode_value, inplace=True)
-
-        # For 'VIP' column, fill missing values with False.
-        self.df['VIP'].fillna(False, inplace=True)
-
-        # Feature Engineering: Impute CryoSleep based on expense patterns.
-        expense_features = ['RoomService', 'FoodCourt', 'ShoppingMall', 'Spa', 'VRDeck']
-        self.df['TotalExpenses'] = self.df[expense_features].sum(axis=1)
-        # If TotalExpenses is zero and CryoSleep is missing, assume CryoSleep = True.
-        self.df.loc[(self.df['TotalExpenses'] == 0) & (self.df['CryoSleep'].isnull()), 'CryoSleep'] = True
-        # If TotalExpenses > 0 and CryoSleep is missing, assume CryoSleep = False.
-        self.df.loc[(self.df['TotalExpenses'] > 0) & (self.df['CryoSleep'].isnull()), 'CryoSleep'] = False
-        # Drop the temporary TotalExpenses column.
-        self.df.drop(columns=['TotalExpenses'], inplace=True)
-
-        # Process PassengerId to extract Group and Group_id (if available)
-        if 'PassengerId' in self.df.columns:
-            self.df["Group"] = self.df['PassengerId'].map(lambda x: x.split('_')[0])
-            self.df["Group_id"] = self.df['PassengerId'].map(lambda x: x.split('_')[1])
-            self.df.drop(columns=['PassengerId'], inplace=True)
-
-        # Split the Cabin column into 'Deck', 'Num', and 'Side'
-        self.df[['Deck', 'Num', 'Side']] = self.df['Cabin'].str.split('/', expand=True)
-        self.df.drop('Cabin', axis=1, inplace=True)
-
-        # Convert categorical/text values using a conversion dictionary.
+        """Perform missing value imputation, feature engineering, and type conversion."""
+        # Conversion dictionary for categorical values.
         conv_dict = {
             'HomePlanet': {'Europa': 0, 'Earth': 1, 'Mars': 2},
             'CryoSleep': {False: 0, True: 1},
-            'Destination': {'TRAPPIST-1e': 0, '55 Cancri e': 1, 'PSO J318.5-22': 2},
-            'VIP': {True: 1, False: 0},
-            'Deck': {j: i for i, j in enumerate(sorted(self.df['Deck'].unique()))},
-            'Side': {'P': 0, 'S': 1},
-            'Transported': {False: 0, True: 1}
+            'Destination': {'TRAPPIST-1e': 0, "55 Cancri e": 1, 'PSO J318.5-22': 2},
+            'VIP': {True: 1, False: 0}
         }
-        self.df.replace(conv_dict, inplace=True)
 
-        # Move the target column 'Transported' to the end.
-        cols = [col for col in self.df.columns if col != 'Transported'] + ['Transported']
-        self.df = self.df[cols]
+        def preprocess_df(df, is_train=False):
+            # Replace categorical values and drop 'Name'
+            df = df.replace(conv_dict)
+            df = df.drop(columns=['Name'])
 
-        # Convert 'Group', 'Group_id', and 'Num' to integers.
-        self.df['Group'] = self.df['Group'].astype(int)
-        self.df['Group_id'] = self.df['Group_id'].astype(int)
-        self.df['Num'] = self.df['Num'].astype(int)
+            # Split 'Cabin' into 'num', 'deck', and 'side'
+            df[['num', 'deck', 'side']] = df['Cabin'].str.split('/', expand=True)
+            # Split 'PassengerId' into 'id' and 'group'
+            df[['id', 'group']] = df['PassengerId'].str.split('_', expand=True)
+            # Drop the original columns no longer needed
+            df = df.drop(columns=['PassengerId', 'Cabin'])
 
-        print("Preprocessing completed. Missing values after imputation:")
-        print(self.df.isnull().sum())
-        return self.df
+            # Convert columns to proper types and recode where necessary
+            df['deck'] = df['deck'].astype(float)
+            df['id'] = df['id'].astype(float)
+            df['group'] = df['group'].astype(float)
+            df['side'] = df['side'].replace({'P': 0, 'S': 1})
+            df['num'] = df['num'].replace({'F': 0, 'G': 1, 'E': 2, 'B': 3, 'C': 4, 'D': 5, 'A': 6, 'T': 7})
+
+            # For numeric columns, fill missing values with the column mean.
+            num_cols = ['RoomService', 'FoodCourt', 'ShoppingMall', 'Spa', 'VRDeck', 'Age']
+            df[num_cols] = df[num_cols].apply(lambda col: col.fillna(col.mean()))
+
+            # For the new split columns and categorical features, use median or mode imputation.
+            df['num'].fillna(df['num'].mode()[0], inplace=True)
+            df['deck'].fillna(df['deck'].median(), inplace=True)
+            df['side'].fillna(df['side'].mode()[0], inplace=True)
+            df['id'].fillna(df['id'].median(), inplace=True)
+            df['group'].fillna(df['group'].mode()[0], inplace=True)
+            df['HomePlanet'].fillna(df['HomePlanet'].mode()[0], inplace=True)
+            df['Destination'].fillna(df['Destination'].mode()[0], inplace=True)
+            df['VIP'].fillna(df['VIP'].mode()[0], inplace=True)
+
+            # For the training data, convert the target column 'Transported'
+            if is_train:
+                df.replace({'Transported': {False: 0, True: 1}}, inplace=True)
+
+            return df
+
+        def adjust_cryosleep(df):
+            # For both train and test, adjust CryoSleep based on expense totals.
+            expense_cols = ['FoodCourt', 'RoomService', 'ShoppingMall', 'Spa', 'VRDeck']
+            # Calculate the total expenses (filling missing values with 0)
+            expense_sum = df[expense_cols].fillna(0).sum(axis=1)
+            # If the sum of expenses is zero, assume CryoSleep = 1; otherwise, set it to 0.
+            df['CryoSleep'] = expense_sum.apply(lambda x: 1.0 if x == 0.0 else 0.0)
+            return df
+
+        # Process training and test DataFrames
+        self.train_data = preprocess_df(self.train_data, is_train=True)
+        self.test_data = preprocess_df(self.test_data, is_train=False)
+
+        # Adjust the CryoSleep column based on expenses
+        self.train_data = adjust_cryosleep(self.train_data)
+        self.test_data = adjust_cryosleep(self.test_data)
+
+        self.df = self.train_data
 
     def feature_selection_reliefF(self, n_features_to_select=3, n_neighbors=10):
         """
@@ -325,10 +322,10 @@ class SpaceshipTitanic:
 
     def train_cat_boost(self, **kwargs):
         """
-        Train by CatBoosing model using the training set.
+        Train by CatBoosting model using the training set.
         Additional keyward arguments are  passed to the catboost model.
         """
-        self.cb_model = CatBoostClassifier(iterations=50,depth=10, **kwargs)
+        self.cb_model = CatBoostClassifier(iterations=50, depth=10, **kwargs)
         self.cb_model.fit(self.X_train, self.y_train)
         y_pred = self.cb_model.predict(self.X_test)
         print("----- Cat Boosting -----")
@@ -336,7 +333,6 @@ class SpaceshipTitanic:
         print("Confusion Matrix:\n", confusion_matrix(self.y_test, y_pred))
         print("Classification Report:\n", classification_report(self.y_test, y_pred))
         return self.cb_model
-        
 
     def train_random_forest(self, **kwargs):
         """
@@ -520,10 +516,10 @@ if __name__ == "__main__":
 
     # Initialize the pipeline with the desired parameters
     pipeline = SpaceshipTitanic(train_path=train_csv,
-                                          test_path=test_csv,
-                                          submission_path=submission_csv,
-                                          random_state=42,
-                                          display_plots=True)
+                                test_path=test_csv,
+                                submission_path=submission_csv,
+                                random_state=42,
+                                display_plots=True)
 
     # Run the complete pipeline (this will load data, perform EDA, preprocess, and train models)
     pipeline.run_pipeline(scale=True, grid_search_params={
