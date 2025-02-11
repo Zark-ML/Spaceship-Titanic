@@ -49,8 +49,6 @@ class SpaceshipTitanic:
         self.test_data = None
         self.submission_data = None
         self.df = None  # will hold the processed training dataframe
-
-        # After splitting
         self.X = None
         self.y = None
         self.X_train = None
@@ -63,6 +61,7 @@ class SpaceshipTitanic:
         self.lr_model = None
         self.rf_model = None
         self.final_model = None
+        # After splitting
 
     def load_data(self):
         """Load the CSV files and create a working dataframe."""
@@ -223,6 +222,9 @@ class SpaceshipTitanic:
             df['Destination'].fillna(df['Destination'].mode()[0], inplace=True)
             df['VIP'].fillna(df['VIP'].mode()[0], inplace=True)
 
+            df_temp = df[df['CryoSleep'] == 1.0]
+            df = df.drop(df_temp[df_temp['Transported'] == 0].index)
+
             # For the training data, convert the target column 'Transported'
             if is_train:
                 df.replace({'Transported': {False: 0, True: 1}}, inplace=True)
@@ -323,7 +325,7 @@ class SpaceshipTitanic:
     def train_cat_boost(self, **kwargs):
         """
         Train by CatBoosting model using the training set.
-        Additional keyward arguments are  passed to the catboost model.
+        Additional keyword arguments are  passed to the catboost model.
         """
         self.cb_model = CatBoostClassifier(iterations=50, depth=10, **kwargs)
         self.cb_model.fit(self.X_train, self.y_train)
@@ -522,16 +524,18 @@ if __name__ == "__main__":
                                 display_plots=True)
 
     # Run the complete pipeline (this will load data, perform EDA, preprocess, and train models)
-    pipeline.run_pipeline(scale=True, grid_search_params={
-        'n_estimators': [100, 200, 300],
-        'max_depth': [10, 20, None],
-        'class_weight': ['balanced', 'balanced_subsample', None],
-    }, optuna_trials=50, run_models=True)
+    # pipeline.run_pipeline(scale=True, grid_search_params={
+    #     'n_estimators': [100, 200, 300],
+    #     'max_depth': [10, 20, None],
+    #     'class_weight': ['balanced', 'balanced_subsample', None],
+    # }, optuna_trials=50, run_models=True)
+
+    pipeline.run_pipeline(scale=True, optuna_trials=50, run_models=True)
 
     # For final model training, for example, using best parameters from grid search or optuna:
     final_params = {'class_weight': None, 'n_estimators': 78,
                     'max_depth': 13, 'min_samples_split': 10, 'min_samples_leaf': 4}
-    final_model = pipeline.final_model_training(final_params, scale=True)
+    final_model = pipeline.final_model_training(final_params)
 
     # Plot ROC curve for the final model (or any other model)
     pipeline.plot_roc_curve(model=final_model)
