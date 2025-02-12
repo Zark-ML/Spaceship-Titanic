@@ -13,6 +13,7 @@ from sklearn.metrics import (
 )
 from sklearn.preprocessing import MinMaxScaler
 from skrebate import ReliefF
+from lightgbm import LGBMClassifier
 from catboost import CatBoostClassifier
 import optuna
 from typing import Optional, Tuple
@@ -71,7 +72,8 @@ class DataProcessor:
         df = df.copy()
         df = self._extract_features(df)
         df = self._encode_categoricals(df)
-        df = self._impute_missing_values(df)
+        df = self._impute_missing_values(df, is_train)
+        df = self._feature_augmentation(df)
 
         if self.config.scale:
             df = self._scale_features(df, is_train)
@@ -96,7 +98,7 @@ class DataProcessor:
         return df
 
     @staticmethod
-    def _impute_missing_values(df: pd.DataFrame) -> pd.DataFrame:
+    def _impute_missing_values(df: pd.DataFrame, is_train: bool) -> pd.DataFrame:
         """Handle missing data"""
 
         # Convert data types
@@ -112,11 +114,27 @@ class DataProcessor:
         # Categorical columns
         cat_cols = ['HomePlanet', 'CryoSleep', 'Destination', 'VIP', 'Cabin_Deck', 'Cabin_Side', 'Group']
         for col in cat_cols:
-            df[col].fillna(df[col].mode()[0], inplace=True)
+            df[col] = df[col].fillna(df[col].mode()[0])
 
-        # dropping 500 data points that we don't need
-        df_temp = df[df['CryoSleep'] == 1.0]
-        df = df.drop(df_temp[df_temp['Transported'] == 0].index)
+        # for training data drop 500 data points that we don't need
+        if is_train:
+            df_temp = df[df['CryoSleep'] == 1.0]
+            df = df.drop(df_temp[df_temp['Transported'] == 0].index)
+
+        # Adjust CryoSleep based on spending
+        spending_cols = ['FoodCourt', 'RoomService', 'ShoppingMall', 'Spa', 'VRDeck']
+
+        # For passengers marked as cryosleep, ensure missing spending values become 0.
+        cryo_mask = df['CryoSleep'] == 1.0
+        df.loc[cryo_mask, spending_cols] = df.loc[cryo_mask, spending_cols].fillna(0)
+
+        # Compute total spending across the five columns.
+        spending_sum = df[spending_cols].sum(axis=1)
+
+        # Reassign CryoSleep based on spending:
+        # If total spending is 0, set CryoSleep to 1.0; otherwise, set it to 0.0.
+        df.loc[spending_sum == 0, 'CryoSleep'] = 1.0
+        df.loc[spending_sum != 0, 'CryoSleep'] = 0.0
 
         return df
 
@@ -147,10 +165,32 @@ class DataProcessor:
 
         return df
 
+    @staticmethod
+    def _feature_augmentation(df):
+        df['HasPaid'] = (df['RoomService'] + df['FoodCourt'] + df['ShoppingMall'] + df['Spa'] + df['VRDeck']) > 0
+        df['Paid'] = df['RoomService'] + df['FoodCourt'] + df['ShoppingMall'] + df['Spa'] + df['VRDeck']
+        df['HasPaid_RoomService'] = (df['RoomService']) > 0
+        df['HasPaid_FoodCourt'] = (df['FoodCourt']) > 0
+        df['HasPaid_ShoppingMall'] = (df['ShoppingMall']) > 0
+        df['HasPaid_Spa'] = (df['Spa']) > 0
+        df['HasPaid_VRDeck'] = (df['VRDeck']) > 0
+        df['IsAdult'] = (df['Age']) > 17
+
+        df['HasPaid'] = df['HasPaid'].astype(int)
+        df['HasPaid_RoomService'] = df['HasPaid_RoomService'].astype(int)
+        df['HasPaid_FoodCourt'] = df['HasPaid_FoodCourt'].astype(int)
+        df['HasPaid_ShoppingMall'] = df['HasPaid_ShoppingMall'].astype(int)
+        df['HasPaid_Spa'] = df['HasPaid_Spa'].astype(int)
+        df['HasPaid_VRDeck'] = df['HasPaid_VRDeck'].astype(int)
+        df['IsAdult'] = df['IsAdult'].astype(int)
+
+        return df
+
     # EDA visualization methods
     def _plot_target_distribution(self, df: pd.DataFrame) -> None:
         plt.figure(figsize=(6, 4))
-        sns.countplot(data=df, x='Transported', palette='viridis')
+        sns.countplot(data=df, x='Transported', hue='Transported',
+                      palette='viridis', legend=False)
         plt.title('Target Variable Distribution')
         if self.config.display_plots:
             plt.show()
@@ -161,7 +201,7 @@ class DataProcessor:
         missing = missing[missing > 0].sort_values(ascending=False)
 
         plt.figure(figsize=(10, 6))
-        sns.barplot(x=missing.values, y=missing.index, palette='viridis')
+        sns.barplot(x=missing.values, y=missing.index, hue=missing.values, palette='viridis', legend=False)
         plt.title('Percentage of Missing Values by Column')
         plt.xlabel('Percentage Missing')
         plt.ylabel('Features')
@@ -187,8 +227,8 @@ class DataProcessor:
         plt.figure(figsize=(15, 10))
         for i, feature in enumerate(categorical, 1):
             plt.subplot(2, 2, i)
-            sns.countplot(data=df, x=feature, palette='viridis',
-                          order=df[feature].value_counts().index)
+            sns.countplot(data=df, x=feature, hue=feature, palette='viridis',
+                          order=df[feature].value_counts().index, legend=False)
             plt.title(f'{feature} Distribution')
             plt.xticks(rotation=45)
         plt.tight_layout()
@@ -215,7 +255,7 @@ class DataProcessor:
         plt.figure(figsize=(12, 6))
         for i, col in enumerate(expense_cols, 1):
             plt.subplot(2, 3, i)
-            sns.boxplot(data=df, x='CryoSleep', y=col, palette='coolwarm')
+            sns.boxplot(data=df, x='CryoSleep', hue='CryoSleep', y=col, palette='coolwarm', legend=False)
             plt.title(f'{col} by CryoSleep')
         plt.tight_layout()
         if self.config.display_plots:
@@ -230,7 +270,8 @@ class ModelTrainer:
         self.models = {
             'logistic_regression': LogisticRegression(),
             'random_forest': RandomForestClassifier(),
-            'catboost': CatBoostClassifier(verbose=0)
+            'catboost': CatBoostClassifier(verbose=0),
+            'lightgdm': LGBMClassifier(n_estimators=40, learning_rate=0.1, max_depth=15),
         }
         self.feature_selector = None
         self.selected_features = None
@@ -320,11 +361,26 @@ class MLPipeline:
 
             self.full_model = RandomForestClassifier(**self.best_params)
             self.full_model.fit(X_full, y_full)
+
+            return {'final_model': self.full_model}
         else:
             # Original split-based training for evaluation
             processed_df = self.data_processor.preprocess_data(train_df)
             self._prepare_splits(processed_df)
             self._train_and_evaluate(processed_df)  # Pass processed data here
+
+            model_results = {}
+            for model_name in ['logistic_regression', 'random_forest', 'catboost', 'lightgdm']:
+                result = self.model_trainer.train_model(model_name, self.X_train, self.y_train)
+                evaluation = self.model_trainer.evaluate_model(result['model'], self.X_test, self.y_test)
+                model_results[model_name] = {**result, **evaluation}
+
+            # Hyperparameter optimization
+            best_params = self.model_trainer.optimize_hyperparameters(self.X_train, self.y_train)
+            print(f"Best parameters from optimization: {best_params}")
+
+            return model_results
+
 
     def create_submission(self, output_path: str = 'submission.csv'):
         """Create submission using full training data and all features"""
@@ -399,18 +455,19 @@ if __name__ == "__main__":
 
     # Execute pipeline
     pipeline = MLPipeline(config)
-    # results = pipeline.run()
-    #
-    # # Display results
-    # for model_name, metrics in results.items():
-    #     print(f"\n=== {model_name.upper()} ===")
-    #     print(f"Mean CV Accuracy: {metrics['mean_score']:.4f}")
-    #     print(f"Test Accuracy: {metrics['accuracy']:.4f}")
-    #     print(metrics['classification_report'])
-    #
-    # # Access best model
-    # final_model = pipeline.model_trainer.best_model
+    results = pipeline.run()
 
-    # Then create submission using full data
-    print("\nCreating submission with full training data...")
-    pipeline.create_submission()
+    # Display results
+    for model_name, metrics in results.items():
+        print(f"\n=== {model_name.upper()} ===")
+        print(f"Mean CV Accuracy: {metrics['mean_score']:.4f}")
+        print(f"Test Accuracy: {metrics['accuracy']:.4f}")
+        print(metrics['classification_report'])
+
+    # Access best model
+    final_model = pipeline.model_trainer.best_model
+    print("Best model trained:", final_model)
+
+    # Create submission using full data
+    # print("\nCreating submission with full training data...")
+    # pipeline.create_submission()
