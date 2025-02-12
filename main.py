@@ -91,10 +91,6 @@ class DataProcessor:
         # Split PassengerId into components
         df[['Group', 'Group_Id']] = df['PassengerId'].str.split('_', expand=True)
 
-        # Create TotalExpenses feature
-        expense_cols = ['RoomService', 'FoodCourt', 'ShoppingMall', 'Spa', 'VRDeck']
-        df['TotalExpenses'] = df[expense_cols].sum(axis=1)
-
         return df
 
     @staticmethod
