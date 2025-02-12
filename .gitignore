@@ -2,6 +2,8 @@
 Project.ipynb
 .DS_Store
 .idea/
+..gitignore.un~
+catboost_info/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
