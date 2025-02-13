@@ -140,6 +140,8 @@ class DataProcessor:
         df.loc[spending_sum == 0, 'CryoSleep'] = 1.0
         df.loc[spending_sum != 0, 'CryoSleep'] = 0.0
 
+        print(df.head())
+
         return df
 
     @staticmethod
@@ -265,6 +267,7 @@ class DataProcessor:
         if self.config.display_plots:
             plt.show()
 
+
     # def _plot_target_relation_to_cat_variable(self, df: pd.DataFrame) -> None:
     #     """ Target variable Relation with Categorical variables"""
     #     values_percentaje = (df[[feature,target]].value_counts(normalize = True)
@@ -305,7 +308,7 @@ class DataProcessor:
     #                  color_discrete_sequence=['#304fa7', '#8bb7cf'], height=300)
     #     feature_stats(data_train, 'Cabin_Side', 'Transported')
     #     return values_merged.pivot(columns = feature, index = target)[['category_size', 'Category_Percent', 'Overall_Percent']]
-
+    #
     # def _plot_target_distribution(self, df: pd.DataFrame, target_var: str) -> None:
     #     """ Checking if the target feature is balanced """
     #     target = data_train[['Transported']].value_counts(normalize = True).round(decimals = 3) * 100
@@ -316,7 +319,7 @@ class DataProcessor:
     #                  marker = dict(colors = color,line = dict(color = pal,width = 1)),
     #                  hovertemplate = "%{label} Transported: %{value:.2f}%<extra></extra>"))
     #     plotly.offline.iplot(fig)
-
+    #
     # def _plot_unique_values_checking(self, df: pd.DataFrame) -> None:
     #     """Checking for the amoun of the unique values"""
     #     df_numeric = df.select_dtypes(include = "number").nunique().sort_values()
@@ -331,7 +334,7 @@ class DataProcessor:
     #                          marker = dict(color = '#8bb7cf')),
     #                          row = 1, col = 2)
     #     fig.show()
-
+    #
     # def _plot_age_to_target_detailed_relation(self, df: pd.DataFrame) -> None:
     #     """ This plot shows the probability of surviving among each age """
     #     plt.figure(figsize=(40,24))
@@ -349,7 +352,7 @@ class ModelTrainer:
             'logistic_regression': LogisticRegression(),
             'random_forest': RandomForestClassifier(),
             'catboost': CatBoostClassifier(verbose=0),
-            'lightgdm': LGBMClassifier(n_estimators=40, learning_rate=0.1, max_depth=15),
+            'lightgbm': LGBMClassifier(n_estimators=40, learning_rate=0.1, max_depth=15),
         }
         self.feature_selector = None
         self.selected_features = None
@@ -448,7 +451,7 @@ class MLPipeline:
             self._train_and_evaluate(processed_df)  # Pass processed data here
 
             model_results = {}
-            for model_name in ['logistic_regression', 'random_forest', 'catboost', 'lightgdm']:
+            for model_name in ['logistic_regression', 'random_forest', 'catboost', 'lightgbm']:
                 result = self.model_trainer.train_model(model_name, self.X_train, self.y_train)
                 evaluation = self.model_trainer.evaluate_model(result['model'], self.X_test, self.y_test)
                 model_results[model_name] = {**result, **evaluation}
