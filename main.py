@@ -91,6 +91,11 @@ class DataProcessor:
         # Split PassengerId into components
         df[['Group', 'Group_Id']] = df['PassengerId'].str.split('_', expand=True)
 
+        expense_cols = ['RoomService', 'FoodCourt', 'ShoppingMall', 'Spa', 'VRDeck']
+        df['TotalExpenses'] = df[expense_cols].sum(axis=1)
+
+        df = pd.get_dummies(df, columns=['Cabin_Deck'])
+
         return df
 
     @staticmethod
@@ -108,7 +113,10 @@ class DataProcessor:
         df[num_cols] = df[num_cols].fillna(df[num_cols].median())
 
         # Categorical columns
-        cat_cols = ['HomePlanet', 'CryoSleep', 'Destination', 'VIP', 'Cabin_Deck', 'Cabin_Side', 'Group']
+        cat_cols = [
+            'HomePlanet', 'CryoSleep', 'Destination', 'VIP','Cabin_Deck_A', 'Cabin_Deck_B', 'Cabin_Deck_C', 'Cabin_Deck_D',
+            'Cabin_Deck_E', 'Cabin_Deck_F', 'Cabin_Deck_G', 'Cabin_Deck_T', 'Cabin_Side', 'Group'
+        ]
         for col in cat_cols:
             df[col] = df[col].fillna(df[col].mode()[0])
 
@@ -143,8 +151,8 @@ class DataProcessor:
             'Destination': {'TRAPPIST-1e': 0, "55 Cancri e": 1, 'PSO J318.5-22': 2},
             'VIP': {False: 0, True: 1},
             'Cabin_Side': {'P': 0, 'S': 1},
-            'Cabin_Deck': {'A': 0, 'B': 1, 'C': 2,
-                           'D': 3, 'E': 4, 'F': 5, 'G': 6, 'T': 7}
+            # 'Cabin_Deck': {'A': 0, 'B': 1, 'C': 2,
+            #                'D': 3, 'E': 4, 'F': 5, 'G': 6, 'T': 7}
         }
         return df.replace(mappings)
 
@@ -257,76 +265,79 @@ class DataProcessor:
         if self.config.display_plots:
             plt.show()
 
-    def _plot_target_relation_to_cat_variable(self, df: pd.DataFrame) -> None:
-        """ Target variable Relation with Categorical variables"""
-        values_percentaje = (df[[feature,target]].value_counts(normalize = True)
-                       .round(decimals = 3) * 100).reset_index().rename(columns = {0:'Overall_Percent'})
-        values_perGroup = pd.merge(df.groupby([feature,target]).size().reset_index(name = 'category_size'), 
-                 df.groupby([feature]).size().reset_index(name = 'Total'), on = [feature])
-        values_perGroup['Category_Percent'] = round((values_perGroup['category_size'] / 
-                                                 values_perGroup['Total']) * 100 ,2)
-        values_merged = values_percentaje.merge(values_perGroup,on = [feature,target])
-        return values_merged.pivot(columns = feature,
-                               index = target)[['category_size', 'Category_Percent', 'Overall_Percent']]
+    # def _plot_target_relation_to_cat_variable(self, df: pd.DataFrame) -> None:
+    #     """ Target variable Relation with Categorical variables"""
+    #     values_percentaje = (df[[feature,target]].value_counts(normalize = True)
+    #                    .round(decimals = 3) * 100).reset_index().rename(columns = {0:'Overall_Percent'})
+    #     values_perGroup = pd.merge(df.groupby([feature,target]).size().reset_index(name = 'category_size'),
+    #              df.groupby([feature]).size().reset_index(name = 'Total'), on = [feature])
+    #     values_perGroup['Category_Percent'] = round((values_perGroup['category_size'] /
+    #                                              values_perGroup['Total']) * 100 ,2)
+    #     values_merged = values_percentaje.merge(values_perGroup,on = [feature,target])
+    #
+    #     """ HomePlanet"""
+    #     px.histogram(data_train, x='HomePlanet', color="Transported", barmode='group',
+    #                  color_discrete_sequence=['#304fa7', '#8bb7cf'], height=300)
+    #     feature_stats(data_train, 'HomePlanet', 'Transported')
+    #
+    #     """ CryoSleep"""
+    #     px.histogram(data_train, x='CryoSleep', color="Transported", barmode='group',
+    #                  color_discrete_sequence=['#304fa7', '#8bb7cf'], height=300)
+    #     feature_stats(data_train, 'CryoSleep', 'Transported')
+    #
+    #     """Destination"""
+    #     px.histogram(data_train, x='Destination', color="Transported", barmode='group',
+    #                  color_discrete_sequence=['#304fa7', '#8bb7cf'], height=300)
+    #     feature_stats(data_train, 'Destination', 'Transported')
+    #
+    #     """VIP"""
+    #     px.histogram(data_train, x='VIP', color="Transported", barmode='group',
+    #                  color_discrete_sequence=['#304fa7', '#8bb7cf'], height=300)
+    #     feature_stats(data_train, 'VIP', 'Transported')
+    #
+    #     """Cabin_Deck"""
+    #     px.histogram(data_train, x='Cabin_Deck', color="Transported", barmode='group',
+    #                  color_discrete_sequence=['#304fa7', '#8bb7cf'], height=300)
+    #     feature_stats(data_train, 'Cabin_Deck', 'Transported')
+    #
+    #     """Cabin_Side"""
+    #     px.histogram(data_train, x='Cabin_Side', color="Transported", barmode='group',
+    #                  color_discrete_sequence=['#304fa7', '#8bb7cf'], height=300)
+    #     feature_stats(data_train, 'Cabin_Side', 'Transported')
+    #     return values_merged.pivot(columns = feature, index = target)[['category_size', 'Category_Percent', 'Overall_Percent']]
 
-          """ HomePlanet"""
-        px.histogram(data_train, x = 'HomePlanet', color = "Transported", barmode = 'group', 
-             color_discrete_sequence = ['#304fa7','#8bb7cf'], height = 300)
-        feature_stats(data_train, 'HomePlanet', 'Transported')
-        """ CryoSleep"""
-        px.histogram(data_train, x = 'CryoSleep', color = "Transported", barmode = 'group', 
-             color_discrete_sequence = ['#304fa7','#8bb7cf'], height = 300)
-        feature_stats(data_train, 'CryoSleep', 'Transported')
-        """Destination"""
-        px.histogram(data_train, x = 'Destination', color = "Transported", barmode = 'group', 
-             color_discrete_sequence = ['#304fa7','#8bb7cf'], height = 300)
-        feature_stats(data_train, 'Destination', 'Transported')
-        """VIP"""
-        px.histogram(data_train, x = 'VIP', color = "Transported", barmode = 'group', 
-             color_discrete_sequence = ['#304fa7','#8bb7cf'], height = 300)
-        feature_stats(data_train, 'VIP', 'Transported')
-        """Cabin_Deck"""
-        px.histogram(data_train, x = 'Cabin_Deck', color = "Transported", barmode = 'group', 
-             color_discrete_sequence = ['#304fa7','#8bb7cf'], height = 300)
-        feature_stats(data_train, 'Cabin_Deck', 'Transported')
-        """Cabin_Side"""
-        px.histogram(data_train, x = 'Cabin_Side', color = "Transported", barmode = 'group', 
-             color_discrete_sequence = ['#304fa7','#8bb7cf'], height = 300)
-        feature_stats(data_train, 'Cabin_Side', 'Transported')
+    # def _plot_target_distribution(self, df: pd.DataFrame, target_var: str) -> None:
+    #     """ Checking if the target feature is balanced """
+    #     target = data_train[['Transported']].value_counts(normalize = True).round(decimals = 3) * 100
+    #     pal, color = ['#304fa7','#8bb7cf'], ['#304fa7','#8bb7cf']
+    #     fig = go.Figure()
+    #     fig.add_trace(go.Pie(labels = target.index, values = target, hole = .5,
+    #                  showlegend = True, sort = False,
+    #                  marker = dict(colors = color,line = dict(color = pal,width = 1)),
+    #                  hovertemplate = "%{label} Transported: %{value:.2f}%<extra></extra>"))
+    #     plotly.offline.iplot(fig)
 
-    def _plot_target_distribution(self, df: pd.DataFrame, target_var: str) -> None
-          """ Checking if the target feature is balanced """
-        target = data_train[['Transported']].value_counts(normalize = True).round(decimals = 3) * 100
-        pal, color = ['#304fa7','#8bb7cf'], ['#304fa7','#8bb7cf']
-        fig = go.Figure()
-        fig.add_trace(go.Pie(labels = target.index, values = target, hole = .5, 
-                     showlegend = True, sort = False, 
-                     marker = dict(colors = color,line = dict(color = pal,width = 1)),
-                     hovertemplate = "%{label} Transported: %{value:.2f}%<extra></extra>"))
-        plotly.offline.iplot(fig)
+    # def _plot_unique_values_checking(self, df: pd.DataFrame) -> None:
+    #     """Checking for the amoun of the unique values"""
+    #     df_numeric = df.select_dtypes(include = "number").nunique().sort_values()
+    #     df_nonNumeric = df.select_dtypes(exclude = "number").nunique().sort_values()
+    #     fig = make_subplots(rows = 1, cols = 2,
+    #                         subplot_titles = ("Unique values per Categorical feature",
+    #                                 "Unique values per Numerical feature"))
+    #     fig.add_trace(go.Bar(x = df_numeric.index, y = df_numeric.values,
+    #                          marker = dict(color = '#304fa7')),
+    #                          row = 1, col = 1)
+    #     fig.add_trace(go.Bar(x = df_nonNumeric.index, y = df_nonNumeric.values,
+    #                          marker = dict(color = '#8bb7cf')),
+    #                          row = 1, col = 2)
+    #     fig.show()
 
-    def _plot_unique_values_checking(self, df: pd.DataFrame) -> None:
-         """Checking for the amoun of the unique values"""
-        df_numeric = df.select_dtypes(include = "number").nunique().sort_values()
-        df_nonNumeric = df.select_dtypes(exclude = "number").nunique().sort_values()
-        fig = make_subplots(rows = 1, cols = 2,
-                    subplot_titles = ("Unique values per Categorical feature", 
-                                    "Unique values per Numerical feature"))
-        fig.add_trace(go.Bar(x = df_numeric.index, y = df_numeric.values, 
-                         marker = dict(color = '#304fa7')), 
-                  row = 1, col = 1)
-        fig.add_trace(go.Bar(x = df_nonNumeric.index, y = df_nonNumeric.values, 
-                         marker = dict(color = '#8bb7cf')),
-                  row = 1, col = 2)
-        fig.show()
-
-     def _plot_age_to_target_detailed_relation(self, df: pd.DataFrame) -> None:
-            """ This plot shows the probability of surviving among each age """
-          plt.figure(figsize=(40,24))
-          sns.countplot(data=data_train, x='Age', hue="Transported", palette = ['#304fa7','#8bb7cf'])
-
-            """ If age is < 18 the passanger tend to be transported """
-        
+    # def _plot_age_to_target_detailed_relation(self, df: pd.DataFrame) -> None:
+    #     """ This plot shows the probability of surviving among each age """
+    #     plt.figure(figsize=(40,24))
+    #     sns.countplot(data=data_train, x='Age', hue="Transported", palette = ['#304fa7','#8bb7cf'])
+    #
+    #     """ If age is < 18 the passanger tend to be transported """
 
 
 class ModelTrainer:
